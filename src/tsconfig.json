@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "module": "commonjs",
+        "target": "es5",
+        "noImplicitAny": true,
+        "sourceMap": true,
+        "declaration": true,
+        "noLib": true,
+        "rootDir": "./",
+        "outDir": "../lib"
+    },
+    "files": [
+        "../node_modules/typescript/lib/lib.es6.d.ts",
+        "../typings/babel/babel-core.d.ts",
+        "../typings/chokidar/chokidar.d.ts",
+        "../typings/lodash/lodash.d.ts",
+        "index.ts"
+    ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "ibsforts",
+  "version": "0.0.1",
+  "description": "Incremental Build Server for TypeScript with pluggable post-compile transforms.",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/enlight/ibsforts.git"
+  },
+  "keywords": [
+    "typescript",
+    "incremental",
+    "build"
+  ],
+  "author": "Vadim Macagon <vadim.macagon@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/enlight/ibsforts/issues"
+  },
+  "homepage": "https://github.com/enlight/ibsforts#readme",
+  "devDependencies": {
+    "typescript": "^1.8.0-dev.20151229"
+  },
+  "dependencies": {
+    "fs-promisified": "github:enlight/node-fs-promisified"
+  }
+}
