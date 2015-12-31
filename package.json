@@ -26,6 +26,7 @@
     "typescript": "^1.8.0-dev.20151229"
   },
   "dependencies": {
+    "chokidar": "^1.4.2",
     "fs-promisified": "github:enlight/node-fs-promisified"
   }
 }

@@ -13,5 +13,16 @@ runs Babel to convert ES6 constructs that aren't yet supported by NodeJS to ES5.
 - [Node.js](https://nodejs.org/) **4.x.x or later**
 - [NPM](https://www.npmjs.com/) **3.x.x** (older versions may work)
 
+## Limitations
+- Only supports TypeScript **1.7 or later**
+
+## Setup
+First, install this package:
+```
+npm install enlight/ibsforts --save-dev
+```
+Next, ensure that the `typescript` module can be imported/required by `ibsforts`, the easiest way
+to do this is to install the `typescript` module in the same `node_modules` directory as `ibsforts`.
+
 ## License
 MIT
