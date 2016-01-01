@@ -8,9 +8,26 @@ import * as chokidar from 'chokidar';
 import { readFile, writeFile, access } from 'fs-promisified';
 
 export interface ILogger {
-  log(message: string): void;
-  warn(message: string): void;
-  error(error: Error): void;
+  log(message: string, time: Date): void;
+  warn(message: string, time: Date): void;
+  error(error: Error, time: Date): void;
+}
+
+class TimedLogger {
+  constructor(private logger: ILogger) {
+  }
+
+  log(message: string): void {
+    this.logger.log(message, new Date());
+  }
+
+  warn(message: string): void {
+    this.logger.warn(message, new Date());
+  }
+
+  error(error: Error): void {
+    this.logger.error(error, new Date());
+  }
 }
 
 interface IHostFileCacheEntry {
@@ -25,7 +42,7 @@ class LanguageServiceHost implements ts.LanguageServiceHost {
   private fileCache = new Map</*filePath:*/string, IHostFileCacheEntry>();
   private filesToLoad: string[] = [];
 
-  constructor(private project: IProject) {
+  constructor(private project: IProject, private logger: TimedLogger) {
   }
 
   getCompilationSettings(): ts.CompilerOptions {
@@ -59,7 +76,8 @@ class LanguageServiceHost implements ts.LanguageServiceHost {
       try {
         fs.accessSync(filePath, fs.R_OK);
       } catch (e) {
-        // todo: log warning
+        // The TypeScript compiler will frequently probe the file system as it attempts to resolve
+        // module imports so it's not at all unusual to end up here.
         return undefined;
       }
       const sourceCode = fs.readFileSync(filePath, 'utf8');
@@ -130,7 +148,11 @@ function getDiagnosticMessageText(diagnostic: ts.Diagnostic): string {
  * (that corresponds to a single project) and writes the generated output to disk.
  */
 class LanguageService {
-  constructor(private host: LanguageServiceHost, private tsService: ts.LanguageService, public project: IProject, private logger: ILogger) {
+  constructor(
+    private host: LanguageServiceHost, private tsService: ts.LanguageService,
+    public project: IProject, private logger: TimedLogger
+  ) {
+    // nothing to do
   }
 
   emitFile(filePath: string): Promise<void> {
@@ -206,7 +228,7 @@ class ProjectWatcher {
   // maps file paths being watched to the callbacks that should be invoked when changes are detected
   private watchedFilesMap = new Map</*filePath:*/string, Array<OnWatchedFileChanged>>();
 
-  constructor(private logger: ILogger) {
+  constructor(private logger: TimedLogger) {
   }
 
   private createWatcher(filesToWatch: string[]): void {
@@ -274,19 +296,21 @@ export class IncrementalBuildServer {
   private services: LanguageService[] = [];
   // one watcher to watch all projects
   private watcher: ProjectWatcher;
+  private logger: TimedLogger;
 
   /**
    * @param logger Logger instance that should be used to log any messages, warnings, and errors.
    */
-  constructor(private logger: ILogger) {
-    this.watcher = new ProjectWatcher(logger);
+  constructor(logger: ILogger) {
+    this.logger = new TimedLogger(logger);
+    this.watcher = new ProjectWatcher(this.logger);
   }
 
   watchProject(project: IProject): Promise<void> {
     return Promise.resolve()
     .then(() => {
       // todo: check if the project is already being watched, if so throw an error
-      const host = new LanguageServiceHost(project);
+      const host = new LanguageServiceHost(project, this.logger);
       const tsService = ts.createLanguageService(host, this.documentRegistry);
       const service = new LanguageService(host, tsService, project, this.logger);
       this.services.push(service);
