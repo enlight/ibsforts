@@ -13,8 +13,10 @@ runs Babel to convert ES6 constructs that aren't yet supported by NodeJS to ES5.
 - [Node.js](https://nodejs.org/) **4.x.x or later**
 - [NPM](https://www.npmjs.com/) **3.x.x** (older versions may work)
 
-## Limitations
+## Current Limitations
 - Only supports TypeScript **1.7 or later**
+- File globs in the `tsconfig.json` are not supported.
+- All source files must be explicitely referenced in the `tsconfig.json`.
 
 ## Setup
 First, install this package:

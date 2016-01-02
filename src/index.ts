@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vadim Macagon
+// Copyright (c) 2015-2016 Vadim Macagon
 // MIT License, see LICENSE file for full terms.
 
 import * as fs from 'fs';
@@ -35,6 +35,11 @@ interface IHostFileCacheEntry {
   snapshot: ts.IScriptSnapshot;
 }
 
+const useCaseSensitiveFileNames =  process.platform !== "win32"
+                                && process.platform !== "win64"
+                                && process.platform !== "darwin";
+const getCanonicalFileName = ts.createGetCanonicalFileName(useCaseSensitiveFileNames);
+
 /**
  * Used by the [[LanguageService]] to load TypeScript source files and compiler options.
  */
@@ -65,11 +70,13 @@ class LanguageServiceHost implements ts.LanguageServiceHost {
   }
 
   getScriptVersion(filePath: string): string {
-    return this.fileCache.get(filePath).version.toString();
+    const cacheKey = this.getFileCacheKey(filePath);
+    return this.fileCache.get(cacheKey).version.toString();
   }
 
   getScriptSnapshot(filePath: string): ts.IScriptSnapshot {
-    const cacheEntry = this.fileCache.get(filePath);
+    const cacheKey = this.getFileCacheKey(filePath);
+    const cacheEntry = this.fileCache.get(cacheKey);
     if (cacheEntry) {
       return cacheEntry.snapshot;
     } else {
@@ -82,7 +89,7 @@ class LanguageServiceHost implements ts.LanguageServiceHost {
       }
       const sourceCode = fs.readFileSync(filePath, 'utf8');
       const snapshot = ts.ScriptSnapshot.fromString(sourceCode);
-      this.fileCache.set(filePath, { version: 0, snapshot });
+      this.fileCache.set(cacheKey, { version: 0, snapshot });
     }
   }
 
@@ -98,12 +105,13 @@ class LanguageServiceHost implements ts.LanguageServiceHost {
     return readFile(filePath, 'utf8')
     .then(sourceCode => {
       const snapshot = ts.ScriptSnapshot.fromString(sourceCode);
-      const cacheEntry = this.fileCache.get(filePath);
+      const cacheKey = this.getFileCacheKey(filePath);
+      const cacheEntry = this.fileCache.get(cacheKey);
       if (cacheEntry) {
         cacheEntry.version++;
         cacheEntry.snapshot = snapshot;
       } else {
-        this.fileCache.set(filePath, { version: 0, snapshot });
+        this.fileCache.set(cacheKey, { version: 0, snapshot });
       }
     });
   }
@@ -116,10 +124,10 @@ class LanguageServiceHost implements ts.LanguageServiceHost {
   reloadProject(): Promise<void> {
     return ProjectLoader.loadFromConfigFile(this.project.projectFilePath)
     .then(reloadedProject => {
-      const oldProject = this.project;
+      reloadedProject.postCompileTransforms = this.project.postCompileTransforms;
       this.project = reloadedProject;
-      // todo: diff the reloaded project to the current one and sync the differences
-    });
+    })
+    .then(() => this.loadProjectRootFiles());
   }
 
   /** @return `true` iff there are files that are being loaded or need to be loaded. */
@@ -129,6 +137,14 @@ class LanguageServiceHost implements ts.LanguageServiceHost {
 
   loadPendingFiles(): Promise<void> {
     return Promise.resolve();
+  }
+
+  getFileCacheKey(filePath: string): string {
+    let absFilePath = path.isAbsolute(filePath)
+      ? path.normalize(filePath)
+      : path.resolve(process.cwd(), filePath);
+    // normalize slashes and case
+    return getCanonicalFileName(absFilePath.replace(/\\/g, '/'));
   }
 }
 
@@ -291,7 +307,7 @@ class ProjectWatcher {
  */
 export class IncrementalBuildServer {
   // this is shared by all language services
-  private documentRegistry = ts.createDocumentRegistry();
+  private documentRegistry = ts.createDocumentRegistry(useCaseSensitiveFileNames);
   // one language service per project
   private services: LanguageService[] = [];
   // one watcher to watch all projects
@@ -323,7 +339,7 @@ export class IncrementalBuildServer {
           project,
           projectFilePath => {
             return host.reloadProject()
-            .then(service.emitProject);
+            .then(() => service.emitProject());
           },
           sourceFilePath => {
             return host.reloadFile(sourceFilePath)
@@ -368,8 +384,8 @@ export class ProjectLoader {
         const result = ts.parseJsonConfigFileContent(config, host, path.dirname(filePath));
         // TODO: if result.fileNames is empty search for source files in the project dir
         const project: IProject = {
-          projectFilePath: path.resolve(filePath),
-          rootFilePaths: result.fileNames,
+          projectFilePath: path.normalize(filePath),
+          rootFilePaths: result.fileNames.map(fileName => path.normalize(fileName)),
           compilerOptions: result.options,
           postCompileTransforms: []
         };
