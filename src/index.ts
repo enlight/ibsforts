@@ -40,6 +40,23 @@ const useCaseSensitiveFileNames =  process.platform !== "win32"
                                 && process.platform !== "darwin";
 const getCanonicalFileName = ts.createGetCanonicalFileName(useCaseSensitiveFileNames);
 
+function transformOutputFiles(
+  files: ts.OutputFile[], transforms: PostCompileTransform[]
+): Promise<ts.OutputFile[]> {
+  // apply all the registered transforms in sequence
+  let transformChain = Promise.resolve(files);
+  transforms.forEach(transform => {
+    transformChain = transformChain.then(transform);
+  });
+  return transformChain;
+}
+
+function writeOutputFiles(files: ts.OutputFile[]): Promise<void> {
+  // TODO: handle ts.OutputFile.writeByteOrderMark
+  return Promise.all(files.map(file => writeFile(file.name, file.text, 'utf8')))
+  .then(() => Promise.resolve());
+}
+
 /**
  * Used by the [[LanguageService]] to load TypeScript source files and compiler options.
  */
@@ -176,21 +193,14 @@ class LanguageService {
     .then(() => {
       let output = this.tsService.getEmitOutput(filePath);
       if (output.emitSkipped) {
-        this.logger.log(`Emitting ${filePath} failed`);
+        this.logger.log(`Failed to emit ${filePath}`);
+        // FIXME: when emitting the entire project compiler options and global diagnostics should
+        //        only be emitted once
         this.logDiagnosticsForFile(filePath);
       } else if (output.outputFiles.length > 0) {
         this.logger.log(`Emitting ${filePath}`);
-
-        // apply all the registered transforms in sequence
-        let transformChain = Promise.resolve(output.outputFiles);
-        this.project.postCompileTransforms.forEach(transform => {
-          transformChain = transformChain.then(transform);
-        });
-
-        // TODO: handle ts.OutputFile.writeByteOrderMark
-        return transformChain
-        .then((files) => Promise.all(files.map(file => writeFile(file.name, file.text, 'utf8'))))
-        .then(() => Promise.resolve());
+        return transformOutputFiles(output.outputFiles, this.project.postCompileTransforms)
+        .then(writeOutputFiles);
       }
     });
   }
@@ -210,6 +220,7 @@ class LanguageService {
 }
 
 export type OnWatchedFileChanged = (filePath: string) => Promise<void>;
+export type PostCompileTransform = (files: ts.OutputFile[]) => Promise<ts.OutputFile[]>;
 
 /**
  *
@@ -231,7 +242,7 @@ export interface IProject {
    * function need not match the length of the array passed in, a zero length array can also be
    * returned to indicate no files should be written to disk.
    */
-  postCompileTransforms: Array<(files: ts.OutputFile[]) => Promise<ts.OutputFile[]>>;
+  postCompileTransforms: PostCompileTransform[];
 }
 
 /**
@@ -303,7 +314,8 @@ class ProjectWatcher {
 
 /**
  * Watches one or more TypeScript projects for changes and incrementally rebuilds any source files
- * that change.
+ * that change. Also applies optional transformations to the generated code before it's written out
+ * to disk.
  */
 export class IncrementalBuildServer {
   // this is shared by all language services
@@ -357,6 +369,51 @@ export class IncrementalBuildServer {
         this.services.splice(i, 1);
       }
     }
+  }
+}
+
+/**
+ * Builds TypeScript projects and applies optional transformations to the generated code before
+ * it's written out to disk.
+ */
+export class BuildServer {
+  private logger: TimedLogger;
+  /**
+   * @param logger Logger instance that should be used to log any messages, warnings, and errors.
+   */
+  constructor(logger: ILogger) {
+    this.logger = new TimedLogger(logger);
+  }
+
+  /**
+   * @return A promise that will be resolved with either be resolved with `true` if the build
+   *         succeeds, or `false` if the build fails.
+   */
+  build(project: IProject): Promise<boolean> {
+    return Promise.resolve()
+    .then(() => {
+      const program = ts.createProgram(project.rootFilePaths, project.compilerOptions);
+      const outputFiles: ts.OutputFile[] = [];
+      const output = program.emit(undefined/*==all*/, (fileName, data, writeByteOrderMark) => {
+        outputFiles.push({
+          name: fileName,
+          writeByteOrderMark: writeByteOrderMark,
+          text: data
+        });
+      });
+      output.diagnostics.forEach(
+        diagnostic => this.logger.log(getDiagnosticMessageText(diagnostic))
+      );
+
+      if (!output.emitSkipped && (outputFiles.length > 0)) {
+        return transformOutputFiles(outputFiles, project.postCompileTransforms)
+        .then(files => {
+          writeOutputFiles(files);
+          return true;
+        });
+      }
+      return output.emitSkipped;
+    });
   }
 }
 
