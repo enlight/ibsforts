@@ -393,6 +393,9 @@ export class BuildServer {
     return Promise.resolve()
     .then(() => {
       const program = ts.createProgram(project.rootFilePaths, project.compilerOptions);
+      const diagnostics = ts.getPreEmitDiagnostics(program);
+      diagnostics.forEach(diagnostic => this.logger.log(getDiagnosticMessageText(diagnostic)));
+
       const outputFiles: ts.OutputFile[] = [];
       const output = program.emit(undefined/*==all*/, (fileName, data, writeByteOrderMark) => {
         outputFiles.push({
@@ -401,9 +404,6 @@ export class BuildServer {
           text: data
         });
       });
-      output.diagnostics.forEach(
-        diagnostic => this.logger.log(getDiagnosticMessageText(diagnostic))
-      );
 
       if (!output.emitSkipped && (outputFiles.length > 0)) {
         return transformOutputFiles(outputFiles, project.postCompileTransforms)
