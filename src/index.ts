@@ -170,9 +170,9 @@ function getDiagnosticMessageText(diagnostic: ts.Diagnostic): string {
   let category = ts.DiagnosticCategory[diagnostic.category];
   if (diagnostic.file) {
     const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
-    return `  ${category} ${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`;
+    return `  ${category} TS${diagnostic.code}: ${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`;
   } else {
-    return `  ${category}: ${message}`;
+    return `  ${category}: TS${diagnostic.code}: ${message}`;
   }
 }
 
