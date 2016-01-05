@@ -172,7 +172,7 @@ function getDiagnosticMessageText(diagnostic: ts.Diagnostic): string {
     const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
     return `  ${category} TS${diagnostic.code}: ${diagnostic.file.fileName} (${line + 1},${character + 1}): ${message}`;
   } else {
-    return `  ${category}: TS${diagnostic.code}: ${message}`;
+    return `  ${category} TS${diagnostic.code}: ${message}`;
   }
 }
 
@@ -188,15 +188,17 @@ class LanguageService {
     // nothing to do
   }
 
-  emitFile(filePath: string): Promise<void> {
+  /**
+   * Feed the given source file to the TypeScript compiler and apply any post-compile transforms
+   * to the generated code before writing it out to disk.
+   */
+  emitFile(filePath: string, checkGlobalDiagnostics: boolean): Promise<void> {
     return Promise.resolve()
     .then(() => {
+      this.logDiagnosticsForFile(filePath, checkGlobalDiagnostics);
       let output = this.tsService.getEmitOutput(filePath);
       if (output.emitSkipped) {
         this.logger.log(`Failed to emit ${filePath}`);
-        // FIXME: when emitting the entire project compiler options and global diagnostics should
-        //        only be emitted once
-        this.logDiagnosticsForFile(filePath);
       } else if (output.outputFiles.length > 0) {
         this.logger.log(`Emitting ${filePath}`);
         return transformOutputFiles(output.outputFiles, this.project.postCompileTransforms)
@@ -206,16 +208,28 @@ class LanguageService {
   }
 
   emitProject(): Promise<void> {
-    return Promise.all(this.project.rootFilePaths.map(filePath => this.emitFile(filePath)))
-    .then(() => Promise.resolve());
+    return Promise.resolve()
+    .then(() => {
+      const diagnostics = this.tsService.getCompilerOptionsDiagnostics();
+      diagnostics.forEach(diagnostic => this.logger.log(getDiagnosticMessageText(diagnostic)));
+      if ((diagnostics.length === 0) || !this.project.compilerOptions.noEmitOnError) {
+        return Promise.all(this.project.rootFilePaths.map(filePath => this.emitFile(filePath, false)))
+        .then(() => Promise.resolve());
+      }
+    });
   }
 
-  private logDiagnosticsForFile(filePath: string) {
-    const allDiagnostics = this.tsService.getCompilerOptionsDiagnostics()
+  private logDiagnosticsForFile(filePath: string, checkGlobalDiagnostics: boolean) {
+    let diagnostics: ts.Diagnostic[];
+    if (checkGlobalDiagnostics) {
+      diagnostics = this.tsService.getCompilerOptionsDiagnostics()
       .concat(this.tsService.getSyntacticDiagnostics(filePath))
       .concat(this.tsService.getSemanticDiagnostics(filePath));
-
-    allDiagnostics.forEach(diagnostic => this.logger.log(getDiagnosticMessageText(diagnostic)));
+    } else {
+      diagnostics = this.tsService.getSyntacticDiagnostics(filePath)
+      .concat(this.tsService.getSemanticDiagnostics(filePath));
+    }
+    diagnostics.forEach(diagnostic => this.logger.log(getDiagnosticMessageText(diagnostic)));
   }
 }
 
@@ -355,7 +369,7 @@ export class IncrementalBuildServer {
           },
           sourceFilePath => {
             return host.reloadFile(sourceFilePath)
-            .then(() => service.emitFile(sourceFilePath));
+            .then(() => service.emitFile(sourceFilePath, true));
           }
         );
       });
