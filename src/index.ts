@@ -409,6 +409,7 @@ export class BuildServer {
       const program = ts.createProgram(project.rootFilePaths, project.compilerOptions);
       const diagnostics = ts.getPreEmitDiagnostics(program);
       diagnostics.forEach(diagnostic => this.logger.log(getDiagnosticMessageText(diagnostic)));
+      const buildSucceeded = (diagnostics.length === 0);
 
       const outputFiles: ts.OutputFile[] = [];
       const output = program.emit(undefined/*==all*/, (fileName, data, writeByteOrderMark) => {
@@ -423,10 +424,10 @@ export class BuildServer {
         return transformOutputFiles(outputFiles, project.postCompileTransforms)
         .then(files => {
           writeOutputFiles(files);
-          return true;
+          return buildSucceeded;
         });
       }
-      return output.emitSkipped;
+      return buildSucceeded;
     });
   }
 }
