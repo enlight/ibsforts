@@ -20,11 +20,14 @@ runs Babel to convert ES6 constructs that aren't yet supported by NodeJS to ES5.
 
 ## Setup
 First, install this package:
-```
+```shell
 npm install enlight/ibsforts --save-dev
 ```
 Next, ensure that the `typescript` module can be imported/required by `ibsforts`, the easiest way
 to do this is to install the `typescript` module in the same `node_modules` directory as `ibsforts`.
+
+## See Also
+- [grunt-ibsforts](https://github.com/enlight/grunt-ibsforts)
 
 ## License
 MIT
