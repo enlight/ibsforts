@@ -422,12 +422,11 @@ export class BuildServer {
 
       if (!output.emitSkipped && (outputFiles.length > 0)) {
         return transformOutputFiles(outputFiles, project.postCompileTransforms)
-        .then(files => {
-          writeOutputFiles(files);
-          return buildSucceeded;
-        });
+        .then(writeOutputFiles)
+        .then(() => buildSucceeded);
+      } else {
+        return buildSucceeded;
       }
-      return buildSucceeded;
     });
   }
 }
