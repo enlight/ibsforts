@@ -6,6 +6,22 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import * as chokidar from 'chokidar';
 import { readFile, writeFile, access } from 'fs-promisified';
+import * as mkdirp from 'mkdirp';
+
+/**
+ * Create any missing directories in the given path.
+ */
+function makeDir(dir: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    mkdirp(dir, (err, made) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
 
 export interface ILogger {
   log(message: string, time: Date): void;
@@ -53,7 +69,22 @@ function transformOutputFiles(
 
 function writeOutputFiles(files: ts.OutputFile[]): Promise<void> {
   // TODO: handle ts.OutputFile.writeByteOrderMark
-  return Promise.all(files.map(file => writeFile(file.name, file.text, 'utf8')))
+  return Promise.resolve()
+  .then(() => {
+    // get a list of unique directory paths where files will be written out to
+    return files.reduce<string[]>((dirs, currentFile) => {
+      const dir = path.dirname(currentFile.name);
+      if (dirs.indexOf(dir) < 0) {
+        dirs.push(dir);
+      }
+      return dirs;
+    }, [])
+    // ensure all the gathered directories exist
+    .reduce((promiseChain, dir) => {
+      return promiseChain.then(() => makeDir(dir));
+    }, Promise.resolve());
+  })
+  .then(() => Promise.all(files.map(file => writeFile(file.name, file.text, 'utf8'))))
   .then(() => Promise.resolve());
 }
 

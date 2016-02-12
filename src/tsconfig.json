@@ -14,6 +14,7 @@
         "../typings/babel/babel-core.d.ts",
         "../typings/chokidar/chokidar.d.ts",
         "../typings/lodash/lodash.d.ts",
+        "../typings/mkdirp/mkdirp.d.ts",
         "index.ts"
     ]
 }
